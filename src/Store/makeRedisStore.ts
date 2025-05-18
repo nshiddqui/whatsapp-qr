@@ -94,7 +94,7 @@ export default function makeRedisStore(deviceId: string, redis: Redis): RedisSto
         const contact = await this.getContact(jid)
         result.push({
           jid,
-          name: (chat && 'name' in chat && chat.name) || (contact && contact.name) || (contact && contact.notify) || '',
+          name: (((chat && 'name' in chat ? chat.name : null) ?? contact?.name ?? contact?.notify) ?? ''),
           ...(chat || {})
         })
       }
