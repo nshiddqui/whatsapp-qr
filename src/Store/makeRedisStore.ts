@@ -20,7 +20,7 @@ type RedisStore = {
   toJSON: () => Promise<Record<string, any>>
 }
 
-export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
+export default function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
   const prefix = `wa:${deviceId}`
 
   return {
@@ -88,15 +88,24 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
 
     async getAllChats() {
       const jids = await this.getKnownJIDs()
-      const result: (Chat & { jid: string; name: string })[] = []
+      const result: (Chat & { jid: string; name: string; profilePictureUrl?: string; lastMessage?: Partial<WAMessage>; unreadCount?: number; isGroup?: boolean })[] = []
       for (const jid of jids) {
         const chat = await this.getChat(jid)
         const contact = await this.getContact(jid)
         if (chat) {
+          const profilePictureUrl = contact?.imgUrl ?? undefined
+          const lastMsgRaw = await redis.lindex(`${prefix}:chat:${jid}:messages`, -1)
+          const lastMessage = lastMsgRaw ? JSON.parse(lastMsgRaw) : undefined
+          const unreadCount = chat.unreadCount ?? 0
+          const isGroup = jid.endsWith('@g.us')
           result.push({
             ...chat,
             jid,
-            name: (((chat && 'name' in chat ? chat.name : null) ?? contact?.name ?? contact?.notify) ?? '') as string
+            name: (contact?.name ?? contact?.notify ?? chat?.name ?? jid.split('@')[0]) as string,
+            profilePictureUrl,
+            lastMessage,
+            unreadCount,
+            isGroup
           })
         }
       }
