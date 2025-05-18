@@ -88,14 +88,14 @@ export default function makeRedisStore(deviceId: string, redis: Redis): RedisSto
 
     async getAllChats() {
       const jids = await this.getKnownJIDs()
-      const result = []
+      const result: (Chat & { jid: string; name: string })[] = []
       for (const jid of jids) {
         const chat = await this.getChat(jid)
         const contact = await this.getContact(jid)
         result.push({
           jid,
-          name: chat?.name || contact?.name || contact?.notify || chat?.pushName || '',
-          ...chat
+          name: (chat && 'name' in chat && chat.name) || (contact && contact.name) || (contact && contact.notify) || '',
+          ...(chat || {})
         })
       }
       return result
