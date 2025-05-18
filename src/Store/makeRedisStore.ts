@@ -20,7 +20,7 @@ type RedisStore = {
   toJSON: () => Promise<Record<string, any>>
 }
 
-export default function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
+export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
   const prefix = `wa:${deviceId}`
 
   return {
