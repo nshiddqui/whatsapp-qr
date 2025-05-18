@@ -50,8 +50,7 @@
     "pino": "^9.6",
     "protobufjs": "^7.2.4",
     "unstorage": "^1.15.0",
-    "unstorage": "^1.15.0",
-    "ioredis": "^1.15.0",
+    "ioredis": "^5.6.1",
     "ws": "^8.13.0"
   },
   "devDependencies": {
