@@ -1,6 +1,8 @@
 // makeRedisStore.ts
 import type { Redis } from 'ioredis'
-import type { BaileysEventEmitter, WAMessage, Chat, Contact, GroupMetadata, proto } from 'baileys'
+import type { BaileysEventEmitter } from '../Types/Events'
+import type { WAMessage, Chat, Contact, GroupMetadata } from '../Types'
+import type { proto } from '../../WAProto'
 
 type MessageDirection = 'latest' | 'earliest'
 
