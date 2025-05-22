@@ -70,6 +70,25 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           await redis.set(`${prefix}:groupmeta:${group.id}`, JSON.stringify(group))
         }
       })
+
+      ev.on('groups.update', async (groups) => {
+        for (const group of groups) {
+          await redis.set(`${prefix}:groupmeta:${group.id}`, JSON.stringify(group))
+        }
+      })
+
+      ev.on('group-participants.update', async (update) => {
+        const { id, participants, action } = update
+        const redisKey = `${prefix}:groupmeta:${id}:participants`
+
+        // Optional: Store the latest action with timestamp
+        await redis.set(redisKey, JSON.stringify({
+          participants,
+          action,
+          updatedAt: Date.now()
+        }))
+      })
+
     },
 
     async getKnownJIDs() {
