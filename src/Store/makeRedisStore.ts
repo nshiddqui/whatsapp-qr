@@ -22,22 +22,22 @@ type RedisStore = {
 
 export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
   const prefix = `wa:${deviceId}`
+  let socketRef: any
 
   return {
     bind(ev, sock) {
+      socketRef = sock
+
       ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest, syncType }) => {
         for (const chat of chats) {
           await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
           await redis.sadd(`${prefix}:knownJIDs`, chat.id)
 
-          // 🟡 If it's a group, also try to fetch and cache full metadata
           if (chat.id.endsWith('@g.us')) {
             try {
               const meta = await sock.groupMetadata(chat.id)
               await redis.set(`${prefix}:groupmeta:${chat.id}`, JSON.stringify(meta))
-            } catch (err) {
-              // optional: you can log or silently ignore
-            }
+            } catch (err) {}
           }
         }
 
@@ -48,6 +48,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
         for (const msg of messages) {
           const jid = msg.key.remoteJid
           if (jid) {
+            if (!msg.message) continue // skip if failed to decrypt
             await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
             await redis.sadd(`${prefix}:knownJIDs`, jid)
           }
@@ -58,6 +59,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
         for (const msg of messages) {
           const jid = msg.key.remoteJid
           if (jid) {
+            if (!msg.message) continue // skip if failed to decrypt
             await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
             await redis.sadd(`${prefix}:knownJIDs`, jid)
           }
@@ -112,9 +114,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           let latestMeta: any = {}
           try {
             latestMeta = await sock.groupMetadata(id)
-          } catch (fetchErr) {
-            /* logging removed */
-          }
+          } catch (fetchErr) {}
 
           const participantCount = latestMeta.participants?.length || 0
           const adminList = latestMeta.participants?.filter((p: any) => p.admin)?.map((p: any) => p.id) || []
@@ -132,9 +132,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           }
 
           await redis.set(metaKey, JSON.stringify(mergedMeta))
-        } catch (err) {
-          /* logging removed */
-        }
+        } catch (err) {}
       })
     },
 
@@ -189,7 +187,19 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
     },
 
     async getGroupMetadata(jid) {
-      const raw = await redis.get(`${prefix}:groupmeta:${jid}`)
+      const key = `${prefix}:groupmeta:${jid}`
+      let raw = await redis.get(key)
+
+      if (!raw && socketRef?.groupMetadata) {
+        try {
+          const latestMeta = await socketRef.groupMetadata(jid)
+          await redis.set(key, JSON.stringify(latestMeta))
+          return latestMeta
+        } catch (err) {
+          return null
+        }
+      }
+
       return raw ? JSON.parse(raw) : null
     },
 
