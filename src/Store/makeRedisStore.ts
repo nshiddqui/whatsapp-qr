@@ -155,7 +155,7 @@ ev.on('groups.update', async (groups) => {
           result.push({
             ...chat,
             jid,
-            name: (contact?.name ?? contact?.notify ?? chat?.name ?? jid.split('@')[0]) as string,
+            name: (contact?.name ?? chat?.name ?? contact?.notify ?? jid.split('@')[0]) as string,
             profilePictureUrl,
             lastMessage,
             unreadCount,
