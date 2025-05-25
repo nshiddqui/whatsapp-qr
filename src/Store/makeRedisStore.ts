@@ -7,7 +7,7 @@ import type { proto } from '../../WAProto'
 type MessageDirection = 'latest' | 'earliest'
 
 type RedisStore = {
-  bind: (ev: BaileysEventEmitter) => void
+  bind: (ev: BaileysEventEmitter, sock: any) => void
   getKnownJIDs: () => Promise<string[]>
   getChat: (jid: string) => Promise<Chat | null>
   getContact: (jid: string) => Promise<Contact | null>
@@ -24,7 +24,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
   const prefix = `wa:${deviceId}`
 
   return {
-    bind(ev) {
+    bind(ev, sock) {
       ev.on('messaging-history.set', async ({ chats, contacts, messages }) => {
         for (const chat of chats) {
           await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
@@ -73,22 +73,71 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
 
       ev.on('groups.update', async (groups) => {
         for (const group of groups) {
-          await redis.set(`${prefix}:groupmeta:${group.id}`, JSON.stringify(group))
+          const key = `${prefix}:groupmeta:${group.id}`
+          const existing = await redis.get(key)
+          const existingMeta = existing ? JSON.parse(existing) : {}
+
+          const merged = {
+            ...existingMeta,
+            ...group,
+            lastGroupUpdate: {
+              updatedAt: Date.now()
+            }
+          }
+
+          await redis.set(key, JSON.stringify(merged))
         }
       })
 
       ev.on('group-participants.update', async (update) => {
         const { id, participants, action } = update
-        const redisKey = `${prefix}:groupmeta:${id}:participants`
+        const metaKey = `${prefix}:groupmeta:${id}`
+        const logKey = `${prefix}:grouplog:${id}`
 
-        // Optional: Store the latest action with timestamp
-        await redis.set(redisKey, JSON.stringify({
-          participants,
-          action,
-          updatedAt: Date.now()
-        }))
+        try {
+          const existing = await redis.get(metaKey)
+          const existingMeta = existing ? JSON.parse(existing) : {}
+
+          let latestMeta: any = {}
+          try {
+            latestMeta = await sock.groupMetadata(id)
+          } catch (fetchErr) {
+            console.warn(`[group-participants.update] Could not fetch metadata for ${id}:`, fetchErr.message)
+          }
+
+          const participantCount = latestMeta.participants?.length || 0
+          const adminList = latestMeta.participants?.filter((p: any) => p.admin)?.map((p: any) => p.id) || []
+
+          const mergedMeta = {
+            ...existingMeta,
+            ...latestMeta,
+            lastParticipantUpdate: {
+              participants,
+              action,
+              updatedAt: Date.now(),
+              participantCount,
+              adminList
+            }
+          }
+
+          await redis.set(metaKey, JSON.stringify(mergedMeta))
+
+          await redis.zadd(logKey, {
+            score: Date.now(),
+            value: JSON.stringify({
+              participants,
+              action,
+              timestamp: new Date().toISOString(),
+              participantCount,
+              adminList
+            })
+          })
+
+          await redis.zremrangebyrank(logKey, 0, -1001)
+        } catch (err) {
+          console.error(`[group-participants.update] Failed for ${id}:`, err)
+        }
       })
-
     },
 
     async getKnownJIDs() {
