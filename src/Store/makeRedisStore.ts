@@ -26,118 +26,104 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
   return {
     bind(ev, sock) {
       ev.on('messaging-history.set', async ({ chats, contacts, messages }) => {
-        for (const chat of chats) {
-          await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
-          await redis.sadd(`${prefix}:knownJIDs`, chat.id)
-        }
-        for (const contact of contacts) {
-          await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
-        }
-        for (const msg of messages) {
-          const jid = msg.key.remoteJid
-          if (jid) {
-            await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
-            await redis.sadd(`${prefix}:knownJIDs`, jid)
-          }
-        }
-      })
+  for (const chat of chats) {
+    await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
+    await redis.sadd(`${prefix}:knownJIDs`, chat.id)
+  }
+  for (const contact of contacts) {
+    await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
+  }
+  for (const msg of messages) {
+    const jid = msg.key.remoteJid
+    if (jid) {
+      await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
+      await redis.sadd(`${prefix}:knownJIDs`, jid)
+    }
+  }
+})
 
-      ev.on('messages.upsert', async ({ messages }) => {
-        for (const msg of messages) {
-          const jid = msg.key.remoteJid
-          if (jid) {
-            await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
-            await redis.sadd(`${prefix}:knownJIDs`, jid)
-          }
-        }
-      })
+ev.on('messages.upsert', async ({ messages }) => {
+  for (const msg of messages) {
+    const jid = msg.key.remoteJid
+    if (jid) {
+      await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
+      await redis.sadd(`${prefix}:knownJIDs`, jid)
+    }
+  }
+})
 
-      ev.on('chats.upsert', async (chats) => {
-        for (const chat of chats) {
-          await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
-          await redis.sadd(`${prefix}:knownJIDs`, chat.id)
-        }
-      })
+ev.on('chats.upsert', async (chats) => {
+  for (const chat of chats) {
+    await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
+    await redis.sadd(`${prefix}:knownJIDs`, chat.id)
+  }
+})
 
-      ev.on('contacts.upsert', async (contacts) => {
-        for (const contact of contacts) {
-          await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
-        }
-      })
+ev.on('contacts.upsert', async (contacts) => {
+  for (const contact of contacts) {
+    await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
+  }
+})
 
-      ev.on('groups.upsert', async (groups) => {
-        for (const group of groups) {
-          await redis.set(`${prefix}:groupmeta:${group.id}`, JSON.stringify(group))
-        }
-      })
+ev.on('groups.upsert', async (groups) => {
+  for (const group of groups) {
+    await redis.set(`${prefix}:groupmeta:${group.id}`, JSON.stringify(group))
+  }
+})
 
-      ev.on('groups.update', async (groups) => {
-        for (const group of groups) {
-          const key = `${prefix}:groupmeta:${group.id}`
-          const existing = await redis.get(key)
-          const existingMeta = existing ? JSON.parse(existing) : {}
+ev.on('groups.update', async (groups) => {
+  for (const group of groups) {
+    const key = `${prefix}:groupmeta:${group.id}`
+    const existing = await redis.get(key)
+    const existingMeta = existing ? JSON.parse(existing) : {}
 
-          const merged = {
-            ...existingMeta,
-            ...group,
-            lastGroupUpdate: {
-              updatedAt: Date.now()
-            }
-          }
+    const merged = {
+      ...existingMeta,
+      ...group,
+      lastGroupUpdate: {
+        updatedAt: Date.now()
+      }
+    }
 
-          await redis.set(key, JSON.stringify(merged))
-        }
-      })
+    await redis.set(key, JSON.stringify(merged))
+  }
+})
 
       ev.on('group-participants.update', async (update) => {
-        const { id, participants, action } = update
-        const metaKey = `${prefix}:groupmeta:${id}`
-        const logKey = `${prefix}:grouplog:${id}`
+  const { id, participants, action } = update
+  const metaKey = `${prefix}:groupmeta:${id}`
 
-        try {
-          const existing = await redis.get(metaKey)
-          const existingMeta = existing ? JSON.parse(existing) : {}
+  try {
+    const existing = await redis.get(metaKey)
+    const existingMeta = existing ? JSON.parse(existing) : {}
 
-          let latestMeta: any = {}
-          try {
-            latestMeta = await sock.groupMetadata(id)
-          } catch (fetchErr) {
-            console.warn(`[group-participants.update] Could not fetch metadata for ${id}:`, fetchErr.message)
-          }
+    let latestMeta: any = {}
+    try {
+      latestMeta = await sock.groupMetadata(id)
+    } catch (fetchErr) {
+      /* logging removed */
+    }
 
-          const participantCount = latestMeta.participants?.length || 0
-          const adminList = latestMeta.participants?.filter((p: any) => p.admin)?.map((p: any) => p.id) || []
+    const participantCount = latestMeta.participants?.length || 0
+    const adminList = latestMeta.participants?.filter((p: any) => p.admin)?.map((p: any) => p.id) || []
 
-          const mergedMeta = {
-            ...existingMeta,
-            ...latestMeta,
-            lastParticipantUpdate: {
-              participants,
-              action,
-              updatedAt: Date.now(),
-              participantCount,
-              adminList
-            }
-          }
+    const mergedMeta = {
+      ...existingMeta,
+      ...latestMeta,
+      lastParticipantUpdate: {
+        participants,
+        action,
+        updatedAt: Date.now(),
+        participantCount,
+        adminList
+      }
+    }
 
-          await redis.set(metaKey, JSON.stringify(mergedMeta))
-
-          await redis.zadd(logKey, {
-            score: Date.now(),
-            value: JSON.stringify({
-              participants,
-              action,
-              timestamp: new Date().toISOString(),
-              participantCount,
-              adminList
-            })
-          })
-
-          await redis.zremrangebyrank(logKey, 0, -1001)
-        } catch (err) {
-          console.error(`[group-participants.update] Failed for ${id}:`, err)
-        }
-      })
+    await redis.set(metaKey, JSON.stringify(mergedMeta))
+  } catch (err) {
+    /* logging removed */
+  }
+})
     },
 
     async getKnownJIDs() {
