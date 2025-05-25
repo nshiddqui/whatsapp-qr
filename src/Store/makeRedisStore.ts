@@ -2,7 +2,7 @@
 import type { Redis } from 'ioredis'
 import type { BaileysEventEmitter } from '../Types/Events'
 import type { WAMessage, Chat, Contact, GroupMetadata } from '../Types'
-import type { proto } from '../../WAProto'
+import { proto } from '../../WAProto'
 
 type MessageDirection = 'latest' | 'earliest'
 
@@ -29,6 +29,44 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
       socketRef = sock
 
       ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest, syncType }) => {
+
+        const deviceId = sock.user?.id || 'unknown_device'
+
+
+        const chatCount = Array.isArray(chats) ? chats.length : 0
+        const contactCount = Array.isArray(contacts) ? contacts.length : 0
+
+        let allMessages: any[] = []
+        if (messages) {
+          if (typeof (messages as any).all === 'function') {
+            allMessages = (messages as any).all()
+          } else if (Array.isArray(messages)) {
+            allMessages = messages
+          }
+        }
+
+        console.log(`[${deviceId}] 🧩 messaging-history.set fired. Chats: ${chatCount}, Contacts: ${contactCount}, Messages: ${allMessages.length}`)
+
+        try {
+          for (const msg of allMessages) {
+            if (!msg.message && msg.messageStubType === proto.WebMessageInfo.StubType.CIPHERTEXT) {
+              console.warn(`[${deviceId}] ⚠️ Skipped invalid/decryption-failed message: ${msg.key.id}`)
+              continue
+            }
+
+            const jid = msg.key.remoteJid
+            if (jid) {
+              if (!msg.message) continue
+              await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
+              await redis.sadd(`${prefix}:knownJIDs`, jid)
+            }
+
+          }
+        } catch (err) {
+          console.error(`[${deviceId}] ❌ Manual fallback failed: ${err?.message || err}`)
+        }
+
+
         console.log(`[${deviceId}] 🧩 messaging-history.set fired. Chats: ${chats.length}, Contacts: ${contacts.length}, Messages: ${messages.length}`)
 
         for (const chat of chats) {
@@ -47,14 +85,14 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
         }
 
-        for (const msg of messages) {
-          const jid = msg.key.remoteJid
-          if (jid) {
-            if (!msg.message) continue
-            await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
-            await redis.sadd(`${prefix}:knownJIDs`, jid)
-          }
-        }
+        // for (const msg of messages) {
+        //   const jid = msg.key.remoteJid
+        //   if (jid) {
+        //     if (!msg.message) continue
+        //     await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
+        //     await redis.sadd(`${prefix}:knownJIDs`, jid)
+        //   }
+        // }
 
         // 🛠️ Fallback: if no chats after sync, try manually pulling
         if (chats.length === 0) {
