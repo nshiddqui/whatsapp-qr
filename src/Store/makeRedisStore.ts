@@ -69,7 +69,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
             try {
               const meta = await sock.groupMetadata(chat.id)
               await redis.set(`${prefix}:groupmeta:${chat.id}`, JSON.stringify(meta))
-            } catch {}
+            } catch { }
           }
         }
 
@@ -97,9 +97,23 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
 
       ev.on('contacts.upsert', async (contacts) => {
         for (const contact of contacts) {
-          await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
+          const key = `${prefix}:contact:${contact.id}`
+          const existingRaw = await redis.get(key)
+          const existing = existingRaw ? JSON.parse(existingRaw) : {}
+
+          // Merge only if new name is available or fallback to old
+          const merged = {
+            ...existing,
+            ...contact,
+            name: contact.name || existing.name,
+            verifiedName: contact.verifiedName || existing.verifiedName,
+            notify: contact.notify || existing.notify
+          }
+
+          await redis.set(key, JSON.stringify(merged))
         }
       })
+
 
       ev.on('groups.upsert', async (groups) => {
         for (const group of groups) {
@@ -136,7 +150,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           let latestMeta: any = {}
           try {
             latestMeta = await sock.groupMetadata(id)
-          } catch {}
+          } catch { }
 
           const participantCount = latestMeta.participants?.length || 0
           const adminList = latestMeta.participants?.filter((p: any) => p.admin)?.map((p: any) => p.id) || []
@@ -154,7 +168,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           }
 
           await redis.set(metaKey, JSON.stringify(mergedMeta))
-        } catch {}
+        } catch { }
       })
     },
 
