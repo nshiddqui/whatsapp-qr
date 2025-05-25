@@ -27,12 +27,9 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
   return {
     bind(ev, sock) {
       socketRef = sock
+      const deviceId = sock.user?.id || 'unknown_device'
 
       ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest, syncType }) => {
-
-        const deviceId = sock.user?.id || 'unknown_device'
-
-
         const chatCount = Array.isArray(chats) ? chats.length : 0
         const contactCount = Array.isArray(contacts) ? contacts.length : 0
 
@@ -55,19 +52,14 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
             }
 
             const jid = msg.key.remoteJid
-            if (jid) {
-              if (!msg.message) continue
+            if (jid && msg.message) {
               await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
               await redis.sadd(`${prefix}:knownJIDs`, jid)
             }
-
           }
         } catch (err) {
           console.error(`[${deviceId}] ❌ Manual fallback failed: ${err?.message || err}`)
         }
-
-
-        console.log(`[${deviceId}] 🧩 messaging-history.set fired. Chats: ${chats.length}, Contacts: ${contacts.length}, Messages: ${messages.length}`)
 
         for (const chat of chats) {
           await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
@@ -77,7 +69,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
             try {
               const meta = await sock.groupMetadata(chat.id)
               await redis.set(`${prefix}:groupmeta:${chat.id}`, JSON.stringify(meta))
-            } catch (err) { }
+            } catch {}
           }
         }
 
@@ -85,16 +77,6 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
         }
 
-        // for (const msg of messages) {
-        //   const jid = msg.key.remoteJid
-        //   if (jid) {
-        //     if (!msg.message) continue
-        //     await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
-        //     await redis.sadd(`${prefix}:knownJIDs`, jid)
-        //   }
-        // }
-
-        // 🛠️ Fallback: if no chats after sync, try manually pulling
         if (chats.length === 0) {
           try {
             const all = await sock.chats.all()
@@ -106,7 +88,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
                 try {
                   const meta = await sock.groupMetadata(chat.id)
                   await redis.set(`${prefix}:groupmeta:${chat.id}`, JSON.stringify(meta))
-                } catch { }
+                } catch {}
               }
             }
             console.log(`[${deviceId}] ✅ Manual chat pull fallback executed.`)
@@ -119,8 +101,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
       ev.on('messages.upsert', async ({ messages }) => {
         for (const msg of messages) {
           const jid = msg.key.remoteJid
-          if (jid) {
-            if (!msg.message) continue
+          if (jid && msg.message) {
             await redis.rpush(`${prefix}:chat:${jid}:messages`, JSON.stringify(msg))
             await redis.sadd(`${prefix}:knownJIDs`, jid)
           }
@@ -175,7 +156,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           let latestMeta: any = {}
           try {
             latestMeta = await sock.groupMetadata(id)
-          } catch (fetchErr) { }
+          } catch {}
 
           const participantCount = latestMeta.participants?.length || 0
           const adminList = latestMeta.participants?.filter((p: any) => p.admin)?.map((p: any) => p.id) || []
@@ -193,7 +174,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           }
 
           await redis.set(metaKey, JSON.stringify(mergedMeta))
-        } catch (err) { }
+        } catch {}
       })
     },
 
@@ -256,7 +237,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
           const latestMeta = await socketRef.groupMetadata(jid)
           await redis.set(key, JSON.stringify(latestMeta))
           return latestMeta
-        } catch (err) {
+        } catch {
           return null
         }
       }
