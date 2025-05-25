@@ -25,14 +25,26 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
 
   return {
     bind(ev, sock) {
-      ev.on('messaging-history.set', async ({ chats, contacts, messages }) => {
+      ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest, syncType }) => {
         for (const chat of chats) {
           await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
           await redis.sadd(`${prefix}:knownJIDs`, chat.id)
+
+          // 🟡 If it's a group, also try to fetch and cache full metadata
+          if (chat.id.endsWith('@g.us')) {
+            try {
+              const meta = await sock.groupMetadata(chat.id)
+              await redis.set(`${prefix}:groupmeta:${chat.id}`, JSON.stringify(meta))
+            } catch (err) {
+              // optional: you can log or silently ignore
+            }
+          }
         }
+
         for (const contact of contacts) {
           await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
         }
+
         for (const msg of messages) {
           const jid = msg.key.remoteJid
           if (jid) {
