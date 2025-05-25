@@ -76,26 +76,6 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
         for (const contact of contacts) {
           await redis.set(`${prefix}:contact:${contact.id}`, JSON.stringify(contact))
         }
-
-        if (chats.length === 0) {
-          try {
-            const all = await sock.chats.all()
-            for (const chat of all) {
-              await redis.set(`${prefix}:chatmeta:${chat.id}`, JSON.stringify(chat))
-              await redis.sadd(`${prefix}:knownJIDs`, chat.id)
-
-              if (chat.id.endsWith('@g.us')) {
-                try {
-                  const meta = await sock.groupMetadata(chat.id)
-                  await redis.set(`${prefix}:groupmeta:${chat.id}`, JSON.stringify(meta))
-                } catch {}
-              }
-            }
-            console.log(`[${deviceId}] ✅ Manual chat pull fallback executed.`)
-          } catch (e) {
-            console.warn(`[${deviceId}] ❌ Manual fallback failed:`, e)
-          }
-        }
       })
 
       ev.on('messages.upsert', async ({ messages }) => {
