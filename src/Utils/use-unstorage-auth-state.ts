@@ -1,5 +1,5 @@
 import type { Storage } from 'unstorage'
-import { proto } from '../../WAProto'
+import { proto } from '../../WAProto/index.js'
 import type {
 	AuthenticationCreds,
 	AuthenticationState,
