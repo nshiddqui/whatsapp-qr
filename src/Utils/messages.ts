@@ -552,7 +552,7 @@ export const generateWAMessageContent = async (
 			buttonText: message.buttonText,
 			title: message.title,
 			footerText: message.footer,
-			description: '',
+			description: message.text,
 			listType: proto.Message.ListMessage.ListType.SINGLE_SELECT
 		}
 
