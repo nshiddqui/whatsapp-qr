@@ -9,7 +9,9 @@ import type {
 	MessageRelayOptions,
 	MiscMessageGenerationOptions,
 	SocketConfig,
-	WAMessageKey
+	WAMessageKey,
+	SendIAMessageOptions,
+	MessageGenerationOptions
 } from '../Types'
 import {
 	aggregateMessageKeysNotFromMe,
@@ -874,7 +876,16 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				return fullMsg
 			}
 		},
-		sendIAMessage: async (jid: string, btns = [], quoted, opts = {}) => {
+		sendIAMessage: async (jid: string, btns = [], quoted: MessageGenerationOptions, opts: SendIAMessageOptions) => {
+			const parseMention = (text: string): string[] => {
+				const mentionRegex = /@(\d{5,16})/g;
+				const mentions: string[] = [];
+				let match;
+				while ((match = mentionRegex.exec(text)) !== null) {
+					mentions.push(`${match[1]}@s.whatsapp.net`);
+				}
+				return mentions;
+			};
 			let messageContent = {
 				viewOnceMessage: {
 					message: {
@@ -893,13 +904,13 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 							contextInfo: {
 								forwardingScore: 9999, // Nilai forward (opsional)
 								isForwarded: false,
-								mentionedJid: conn.parseMention(opts.header + opts.content + opts.footer),
+								mentionedJid: parseMention(opts.header + opts.content + opts.footer),
 							},
-							externalAdReply: {
-								showAdAttribution: true,
-								renderLargerThumbnail: false,
-								mediaType: 1, // Media tipe (default: gambar)
-							},
+							// externalAdReply: {
+							// 	showAdAttribution: true,
+							// 	renderLargerThumbnail: false,
+							// 	mediaType: 1, // Media tipe (default: gambar)
+							// },
 							nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
 								buttons: btns, // Tombol interaktif
 							}),
@@ -908,22 +919,10 @@ export const makeMessagesSocket = (config: SocketConfig) => {
 				},
 			};
 
-			// Tambahkan media jika diperlukan
-			if (opts.media) {
-				const media = await prepareWAMessageMedia(
-					{
-						[opts.mediaType || 'image']: { url: opts.media },
-					},
-					{ upload: conn.waUploadToServer }
-				);
-				messageContent.viewOnceMessage.message.interactiveMessage.header.hasMediaAttachment = true;
-				Object.assign(messageContent.viewOnceMessage.message.interactiveMessage.header, media);
-			}
-
 			// Buat pesan dan kirimkan
-			let msg = await generateWAMessageFromContent(jid, messageContent, { quoted });
-			await relayMessage(msg.key.remoteJid, msg.message, {
-				messageId: msg.key.id,
+			let msg = await generateWAMessageFromContent(jid, messageContent, quoted);
+			await relayMessage(jid, msg.message!, {
+				messageId: msg.key.id!,
 			});
 		}
 	}

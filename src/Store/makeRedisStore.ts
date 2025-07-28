@@ -58,7 +58,7 @@ export function makeRedisStore(deviceId: string, redis: Redis): RedisStore {
             }
           }
         } catch (err) {
-          console.error(`[${deviceId}] ❌ Manual fallback failed: ${err?.message || err}`)
+          console.error(`[${deviceId}] ❌ Manual fallback failed: ${err}`)
         }
 
         for (const chat of chats) {

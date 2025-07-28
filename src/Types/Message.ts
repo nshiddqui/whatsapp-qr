@@ -353,3 +353,11 @@ export type MediaDecryptionKeyInfo = {
 }
 
 export type MinimalMessage = Pick<proto.IWebMessageInfo, 'key' | 'messageTimestamp'>
+
+export type SendIAMessageOptions = {
+	content: string;
+	footer: string;
+	header: string;
+	media?: string;
+	mediaType?: 'image' | 'video' | 'document' | 'audio';
+}
