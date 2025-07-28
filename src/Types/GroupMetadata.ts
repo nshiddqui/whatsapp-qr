@@ -1,4 +1,4 @@
-import { Contact } from './Contact'
+import type { Contact } from './Contact'
 
 export type GroupParticipant = Contact & {
 	isAdmin?: boolean
@@ -17,15 +17,20 @@ export interface GroupMetadata {
 	/** group uses 'lid' or 'pn' to send messages */
 	addressingMode: 'pn' | 'lid'
 	owner: string | undefined
+	ownerJid?: string | undefined
+	owner_country_code?: string | undefined
 	subject: string
 	/** group subject owner */
 	subjectOwner?: string
+	subjectOwnerJid?: string
 	/** group subject modification date */
 	subjectTime?: number
 	creation?: number
 	desc?: string
 	descOwner?: string
+	descOwnerJid?: string
 	descId?: string
+	descTime?: number
 	/** if this group is part of a community, it returns the jid of the community to which it belongs */
 	linkedParent?: string
 	/** is set when the group only allows admins to change group settings */
